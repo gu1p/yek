@@ -1,3 +1,8 @@
+"""Shortcut orchestration and hot-reload utilities."""
+
+# pylint: disable=missing-function-docstring,missing-class-docstring,too-few-public-methods
+# pylint: disable=too-many-instance-attributes
+
 import importlib
 import importlib.util
 import inspect
@@ -7,10 +12,10 @@ import threading
 import time
 import uuid
 from time import sleep
-from typing import Callable, Any, Dict
+from typing import Any, Callable, Dict, List
 
-from watchdog.events import FileSystemEventHandler, FileSystemEvent
-from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler, FileSystemEvent  # pylint: disable=import-error
+from watchdog.observers import Observer  # pylint: disable=import-error
 
 from yek.matchers import Matcher, Result
 from yek.util import KeyEvent, KeyboardStateMap
@@ -35,7 +40,7 @@ class ActionTrigger:
         self.matcher = matcher
         self._last_match = 0
 
-    def match(self, events: list[KeyEvent]) -> Result:
+    def match(self, events: List[KeyEvent]) -> Result:
         events = [e for e in events if e.pressed_at > self._last_match]
         match = self.matcher.match(events)
         if match:
@@ -46,22 +51,22 @@ class ActionTrigger:
 class ActionBankTrigger:
     def __init__(self):
         self._lock = threading.Lock()
-        self._pairs: Dict[uuid, ActionTrigger] = {}
+        self._pairs: Dict[uuid.UUID, ActionTrigger] = {}
         self._properties = {}
 
-    def match(self, events: list[KeyEvent]) -> list[Action]:
+    def match(self, events: List[KeyEvent]) -> List[Action]:
         with self._lock:
             actions = []
             for trigger in self._pairs.values():
                 if trigger.match(events):
                     actions.append(trigger.action)
-            return actions
+                return actions
 
     def register(self, trigger: ActionTrigger) -> None:
         with self._lock:
             self._pairs[trigger.action.id] = trigger
 
-    def find_by_prop(self, prop: str, value: str) -> list[ActionTrigger]:
+    def find_by_prop(self, prop: str, value: str) -> List[ActionTrigger]:
         registers = []
         for _, register in self._pairs.items():
             prop_value = register.action.properties.get(prop)
@@ -75,7 +80,7 @@ class ActionBankTrigger:
                 self._pairs.pop(register.action.id, None)
 
 
-def _load_action_triggers(file_path: str) -> list[ActionTrigger]:
+def _load_action_triggers(file_path: str) -> List[ActionTrigger]:
     try:
         spec = importlib.util.spec_from_file_location("module", file_path)
         module = importlib.util.module_from_spec(spec)
@@ -86,7 +91,7 @@ def _load_action_triggers(file_path: str) -> list[ActionTrigger]:
         app_instance = None
 
         # First, find the App instance
-        for name, obj in inspect.getmembers(module):
+        for _, obj in inspect.getmembers(module):
             if isinstance(obj, App):
                 app_instance = obj
                 break
@@ -95,7 +100,7 @@ def _load_action_triggers(file_path: str) -> list[ActionTrigger]:
             return []
 
         # Look for route decorators
-        for name, obj in inspect.getmembers(module):
+        for _, obj in inspect.getmembers(module):
             if isinstance(obj, ActionTrigger):
                 route_mapping.append(obj)
         return route_mapping
@@ -127,8 +132,8 @@ class _HotReloader(FileSystemEventHandler):
             for trigger in triggers:
                 print(f"Registering: {trigger.action} as {trigger.matcher.debug()}")
                 self.app.action_triggers.register(trigger)
-        except Exception as e:
-            print(f"Failed to reload routes: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            print(f"Failed to reload routes: {e}")  # pragma: no cover
         else:
             print("Routes reloaded successfully.")
 
@@ -145,7 +150,7 @@ class App:
         self._lock = threading.Lock()
         self._last_called: float = 0
 
-        self._keyboard = KeyboardStateMap()
+        self._keyboard = KeyboardStateMap()  # pylint: disable=abstract-class-instantiated
 
         # Hot-reload
         self._observer = None

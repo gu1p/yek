@@ -1,16 +1,17 @@
+"""Keyboard matchers and combinators."""
+
+# pylint: disable=missing-class-docstring,missing-function-docstring
+
 import abc
 import math
 from dataclasses import dataclass
-from typing import Optional, Union, Tuple, Sequence, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union
 
+from yek.events import KeyEvent, KeyEventKind
 from yek.time import Wait
 
 if TYPE_CHECKING:
     from yek import App
-
-from pynput import keyboard
-
-from yek.events import KeyEvent, KeyEventKind
 
 __all__ = [
     "Key",
@@ -40,22 +41,28 @@ class Matcher(abc.ABC):
     app: "App" = None
 
     @abc.abstractmethod
-    def match(self, events: Sequence[KeyEvent]) -> Result:   pass
+    def match(self, events: Sequence[KeyEvent]) -> Result:
+        """Return a Result when events satisfy the matcher."""
 
     @abc.abstractmethod
-    def __truediv__(self, other: Union["Matcher", Tuple[int, int]]) -> "Matcher":   pass
+    def __truediv__(self, other: Union["Matcher", Tuple[int, int]]) -> "Matcher":
+        """Compose matchers in sequence."""
 
     @abc.abstractmethod
-    def __or__(self, other: "Matcher") -> "Matcher":    pass
+    def __or__(self, other: "Matcher") -> "Matcher":
+        """Alternate between two matchers."""
 
     @abc.abstractmethod
-    def __and__(self, other: "Matcher") -> "Matcher":   pass
+    def __and__(self, other: "Matcher") -> "Matcher":
+        """Require both matchers."""
 
     @abc.abstractmethod
-    def __matmul__(self, other: Union[float, Wait]) -> "Matcher":   pass
+    def __matmul__(self, other: Union[float, Wait]) -> "Matcher":
+        """Combine with a timing constraint."""
 
     @abc.abstractmethod
-    def debug(self) -> str: pass
+    def debug(self) -> str:
+        """Debug description of the matcher."""
 
 
 class Key(Matcher):
@@ -90,10 +97,6 @@ class Key(Matcher):
                 return Result(value=Match(start=event, end=event), stop_position=n)
         return Result(stop_position=len(events))
 
-    @property
-    def code(self):
-        return self._code
-
     def __matmul__(self, other: Union[float, Wait]) -> Matcher:
         def _to_seconds(value: Union[float, int, Wait]) -> float:
             if isinstance(value, Wait):
@@ -106,7 +109,7 @@ class Key(Matcher):
             if len(other) != 2:
                 raise ValueError("Timed press-release tuple must have exactly 2 values")
             start, end = (_to_seconds(other[0]), _to_seconds(other[1]))
-            if not (0 <= start < end):
+            if not 0 <= start < end:
                 raise ValueError("Timed press-release must satisfy 0 <= start < end")
             return _TimedPressRelease(self, start=start, end=end)
 
@@ -234,7 +237,10 @@ class _MatchSequence(Matcher):
             matches.append(result.value)
             position = result.stop_position + 1
 
-        return Result(value=Match(start=matches[0].start, end=matches[-1].end), stop_position=position)
+        return Result(
+            value=Match(start=matches[0].start, end=matches[-1].end),
+            stop_position=position,
+        )
 
     def __matmul__(self, other) -> "Matcher":
         raise ValueError("Cannot chain timed press-release with a match sequence")
@@ -293,7 +299,10 @@ class _And(Matcher):
 
             stop_position = max(stop_position, match.stop_position)
             matches.append(match.value)
-        return Result(value=Match(start=matches[0].start, end=matches[-1].end), stop_position=stop_position)
+        return Result(
+            value=Match(start=matches[0].start, end=matches[-1].end),
+            stop_position=stop_position,
+        )
 
     def __matmul__(self, other: Union[float, Wait]) -> Matcher:
         return _and(*[m.__matmul__(other) for m in self._matchers])
@@ -346,7 +355,7 @@ class _AndKeys(Matcher):
         return Result(stop_position=min_stop)
 
     def __matmul__(self, other: Union[float, Wait]) -> Matcher:
-        return _and(self.a.__matmul__(other), self.b.__matmul__(other))
+        return _and(*[k.__matmul__(other) for k in self._keys])
 
     def __truediv__(self, other: Union[Matcher, Tuple[int, int]]) -> Matcher:
         return _MatchSequence(self, other)
@@ -383,13 +392,16 @@ class _AndStartEndMatcher(Matcher):
 
         if intersection:
             stop = max(match_a.stop_position, match_b.stop_position)
-            return Result(value=Match(start=intersection[0], end=intersection[1]), stop_position=stop)
+            return Result(
+                value=Match(start=intersection[0], end=intersection[1]),
+                stop_position=stop,
+            )
 
         stop = min(match_a.stop_position, match_b.stop_position)
         return Result(stop_position=stop)
 
     def __matmul__(self, other: Union[float, Wait]) -> Matcher:
-        return _and(*[m.__matmul__(other) for m in self._keys])
+        return _and(self.a.__matmul__(other), self.b.__matmul__(other))
 
     def __truediv__(self, other: Union[Matcher, Tuple[int, int]]) -> Matcher:
         return _MatchSequence(self, other)
@@ -404,8 +416,9 @@ class _AndStartEndMatcher(Matcher):
         return f"AndStartEndMatcher({self.a.debug()}, {self.b.debug()})"
 
 
-def get_common_intersection(events: List[Tuple[Optional[KeyEvent], Optional[KeyEvent]]]) -> Optional[
-    Tuple[Optional[KeyEvent], Optional[KeyEvent]]]:
+def get_common_intersection(
+    events: List[Tuple[Optional[KeyEvent], Optional[KeyEvent]]]
+) -> Optional[Tuple[Optional[KeyEvent], Optional[KeyEvent]]]:
     if not events:
         return None
 
@@ -428,7 +441,7 @@ def get_common_intersection(events: List[Tuple[Optional[KeyEvent], Optional[KeyE
         cache[start_time] = start
         cache[end_time] = end
 
-        # If the current event starts after or when the intersection ends, there's no common intersection
+        # If the current event starts after the intersection ends, there's no overlap
         if start_time >= intersection_end:
             return None
 
@@ -441,9 +454,13 @@ def get_common_intersection(events: List[Tuple[Optional[KeyEvent], Optional[KeyE
 
 
 def _and(*a: Matcher) -> Matcher:
-    if len(a) == 0: raise ValueError("Cannot AND zero matchers")
-    if len(a) == 1: return a[0]
-    if len(a) > 2: return _and(a[0], _and(a[1], *a[2:]))
+    # pylint: disable=too-many-return-statements,too-many-branches,protected-access
+    if len(a) == 0:
+        raise ValueError("Cannot AND zero matchers")
+    if len(a) == 1:
+        return a[0]
+    if len(a) > 2:
+        return _and(a[0], _and(a[1], *a[2:]))
 
     a, b = a
     if isinstance(a, Key) and isinstance(b, Key):
@@ -459,7 +476,7 @@ def _and(*a: Matcher) -> Matcher:
         return _AndStartEndMatcher(a, b)
 
     if isinstance(a, (_TimedPressRelease, _MatchSequence, StringMatcher)) and isinstance(b, Key):
-        return _AndStartEndMatcher(b, a)
+        return _AndStartEndMatcher(a=b, b=a)
 
     if isinstance(a, _Or) and isinstance(b, (_TimedPressRelease, _MatchSequence, StringMatcher)):
         return _Or(*[_and(m, b) for m in a._matchers])

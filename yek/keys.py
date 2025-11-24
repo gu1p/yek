@@ -1,4 +1,7 @@
-import platform
+"""Convenience constructors for common keyboard matcher keys."""
+
+# pylint: disable=invalid-name,import-error
+
 from contextlib import suppress
 
 import pynput
@@ -66,6 +69,7 @@ __all__ = [
 
 
 def Char(char: str, case: bool = False) -> Matcher:
+    """Create a matcher for a single character."""
     if not isinstance(char, str) and len(char) != 1:
         raise ValueError(f"We only support single character strings, got {char}")
 
@@ -82,6 +86,7 @@ def Char(char: str, case: bool = False) -> Matcher:
 
 
 def String(s: str, case: bool = False) -> Matcher:
+    """Create a matcher for an exact string sequence."""
     return StringMatcher(s, case=case)
 
 

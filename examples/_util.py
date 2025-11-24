@@ -1,17 +1,19 @@
+"""Helper utilities for example scripts."""
+
 import shutil
 import subprocess
+import webbrowser
 from typing import Optional
 
 
 def open_as_browser_app(
     url: str, profile: str = "Default", browser: Optional[str] = None
 ) -> subprocess.Popen:
+    """Open the given URL as a standalone browser window using the provided profile."""
     print(f"Opening {url} in browser")
     browser = browser or get_browser()
     if browser is None:
         # Fallback to system default browser
-        import webbrowser
-
         webbrowser.open(url)
         return None
 
@@ -22,7 +24,7 @@ def open_as_browser_app(
         f"--profile-directory={profile}",
     ]
 
-    process = subprocess.Popen(
+    process = subprocess.Popen(  # pylint: disable=consider-using-with
         chrome_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
 
@@ -30,6 +32,7 @@ def open_as_browser_app(
 
 
 def get_browser() -> str:
+    """Return a supported browser executable path if available."""
     for browser in ["brave-browser", "brave", "google-chrome", "google-chrome-stable"]:
         browser = shutil.which(browser)
         if browser is not None:

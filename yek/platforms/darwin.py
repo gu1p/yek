@@ -1,3 +1,5 @@
+"""macOS-specific keyboard state helpers."""
+
 import os
 import subprocess
 from contextlib import suppress
@@ -20,19 +22,23 @@ class MacKeyboardState(PynputKeyboardState):
             raise
 
     def _prompt_permissions(self, exc: Exception):
-        if self.__class__._prompted:
+        del exc
+        if MacKeyboardState._prompted:
             return
         if os.environ.get("YEK_SKIP_MAC_PROMPT"):
             return
 
-        self.__class__._prompted = True
+        MacKeyboardState._prompted = True
         with suppress(Exception):
             print(
                 "yek could not start keyboard listener (macOS permissions may be missing). "
                 "Opening Input Monitoring settings..."
             )
-            subprocess.Popen(
-                ["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_Keyboard"],
+            subprocess.Popen(  # pylint: disable=consider-using-with
+                [
+                    "open",
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Keyboard",
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )

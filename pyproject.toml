@@ -1,6 +1,6 @@
 [project]
 name = "yek"
-version = "0.1.0"
+version = "0.0.1"
 description = ""
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,3 +26,8 @@ watchdog = "^5.0.3"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pylint>=4.0.3",
+]

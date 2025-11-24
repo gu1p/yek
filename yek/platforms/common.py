@@ -1,3 +1,7 @@
+"""Shared pynput-backed keyboard state implementation."""
+
+# pylint: disable=missing-function-docstring,import-error
+
 import threading
 import time
 from typing import Dict, List, Union
@@ -12,6 +16,8 @@ from yek.platforms.base import KeyboardState
 
 
 class PynputKeyboardState(KeyboardState):
+    """Keyboard state backed by pynput listeners."""
+
     def __init__(self, max_buffer_len: int = 100):
         self._running = threading.Event()
         self._lock = threading.Lock()
@@ -49,22 +55,22 @@ class PynputKeyboardState(KeyboardState):
             return self._map.get(key.code, False)
 
     def is_pressed_any(self, *keys) -> bool:
-        codes = set([k.code for k in keys])
+        codes = {k.code for k in keys}
         with self._lock:
-            return any([self._map.get(code, False) for code in codes])
+            return any(self._map.get(code, False) for code in codes)
 
     def is_only_pressed(self, *keys) -> bool:
-        keys = set([k.code for k in keys])
+        keys = {k.code for k in keys}
         with self._lock:
-            return keys == set([k for k, v in self._map.items() if v])
+            return keys == {k for k, v in self._map.items() if v}
 
     def was_pressed_any_since(self, since: float, *keys) -> bool:
-        keys = set([get_event(k) for k in keys])
+        keys = {get_event(k, kind=KeyEventKind.PRESSED) for k in keys}
         buffer = set(self._buffer.get_since(since))
         return bool(buffer.intersection(keys))
 
     def other_than_was_pressed_since(self, since: float, *keys) -> bool:
-        keys = set([get_event(k) for k in keys])
+        keys = {get_event(k, kind=KeyEventKind.PRESSED) for k in keys}
         buffer = set(self._buffer.get_since(since))
         return bool(buffer.difference(keys))
 

@@ -1,3 +1,7 @@
+"""Platform-specific keyboard state abstraction."""
+
+# pylint: disable=missing-function-docstring
+
 import abc
 from typing import List
 
@@ -6,6 +10,8 @@ from yek.matchers import Key
 
 
 class KeyboardState(abc.ABC):
+    """Interface implemented by each platform backend."""
+
     @abc.abstractmethod
     def start(self) -> None:
         raise NotImplementedError

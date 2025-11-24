@@ -1,41 +1,52 @@
+"""Actions and execution context for shortcuts."""
+
+# pylint: disable=missing-class-docstring,missing-function-docstring
+
 import abc
 import inspect
 import threading
 import time
 import uuid
-from typing import Dict, Union, Callable, List, Optional, Any
+from typing import Any, Callable, Dict, List, Optional, Union
 
-from pynput.keyboard import Key, KeyCode
+from pynput.keyboard import Key, KeyCode  # pylint: disable=import-error
 
-from yek.matchers import Matcher
 from yek.util import KeyboardStateMap, KeyEvent, get_function_details
 
 
 class Action(abc.ABC):
     @abc.abstractmethod
-    def execute(self, context: "Context"):  pass
+    def execute(self, context: "Context"):
+        pass
 
     @abc.abstractmethod
-    def is_running(self) -> bool:  pass
+    def is_running(self) -> bool:
+        pass
 
     @property
     @abc.abstractmethod
     def id(self) -> str:
         pass
 
-    def __eq__(self, other: "Action"):  return self.id == other.id
-    def __hash__(self): return hash(self.id)
-    def __str__(self) -> str: pass
+    def __eq__(self, other: "Action"):
+        return self.id == other.id
+
+    def __hash__(self):
+        return hash(self.id)
+
+    def __str__(self) -> str:
+        return self.id
 
     @property
     @abc.abstractmethod
-    def properties(self) -> Optional[Any]:  pass
+    def properties(self) -> Optional[Any]:
+        pass
 
 
 class SimpleAction(Action):
     def __init__(self, func: Callable[..., None]):
         self._id = str(uuid.uuid4())
-        desc =  get_function_details(func)
+        desc = get_function_details(func)
         self._props = {
             "file": desc.file,
             "name": desc.name,
@@ -69,6 +80,7 @@ class SimpleAction(Action):
         name, file, line = self._props["name"], self._props["file"], self._props["line"]
         return f"SimpleAction(func={name}, defined_at={file}:{line})"
 
+
 class Context:
     def __init__(self, keyboard_state: KeyboardStateMap):
         self.__keyboard_state = keyboard_state
@@ -86,7 +98,7 @@ class Context:
             self.__started_at, *keys
         )
 
-    def keys(self) -> list[KeyEvent]:
+    def keys(self) -> List[KeyEvent]:
         return self.__keyboard_state.get_since(self.__started_at)
 
     @property
@@ -94,7 +106,7 @@ class Context:
         return self.__started_at
 
     @property
-    def payload(self) -> Dict[str, any]:
+    def payload(self) -> Dict[str, Any]:
         return self.__payload
 
 
@@ -102,5 +114,4 @@ def get_function_name(obj: Callable[..., Any]) -> Optional[str]:
     # Check if the object is a function or method
     if inspect.isfunction(obj) or inspect.ismethod(obj):
         return obj.__name__
-    else:
-        return None
+    return None

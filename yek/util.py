@@ -1,11 +1,12 @@
+"""Utility helpers for keyboard state and function metadata."""
+
 import inspect
 import os
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from yek.events import KeyEvent
-from yek.platforms import create_keyboard_state, KeyboardState
+from yek.platforms import KeyboardState, create_keyboard_state
 
 __all__ = ["KeyboardStateMap", "KeyEvent"]
 
@@ -28,12 +29,14 @@ class KeyboardStateMap(KeyboardState):
 
 @dataclass
 class FunctionDetails:
+    """Captured metadata about a callable."""
     name: str
     line: int
     file: str
 
 
-def get_function_details(obj: Callable[[...], Any]) -> FunctionDetails:
+def get_function_details(obj: Callable[..., Any]) -> FunctionDetails:
+    """Extract function name, line number, and file path."""
     # Check if the object is a function or method
     if inspect.isfunction(obj) or inspect.ismethod(obj):
         name = obj.__name__

@@ -1,4 +1,5 @@
-import time
+"""Tests for matcher combinations."""
+
 import unittest
 
 try:
@@ -11,12 +12,15 @@ if pynput is not None:
     from yek.keys import Char
     from yek.time import Wait
 else:
-    KeyEvent = KeyEventKind = Char = Wait = None  # type: ignore
+    KeyEvent = KeyEventKind = Char = Wait = None  # type: ignore  # pylint: disable=invalid-name
 
 
 @unittest.skipIf(pynput is None, "pynput not installed")
 class MatcherTests(unittest.TestCase):
+    """Exercises matcher combinations when pynput is available."""
+
     def _event(self, char: str, kind: KeyEventKind, ts: float) -> KeyEvent:
+        """Build a KeyEvent with a fixed timestamp."""
         event = KeyEvent(
             key=pynput.keyboard.KeyCode.from_char(char),
             kind=kind,
@@ -25,6 +29,7 @@ class MatcherTests(unittest.TestCase):
         return event
 
     def test_key_match_by_code(self):
+        """Single key matches when codes align."""
         key = Char("a", case=True)
         event = KeyEvent(
             key=pynput.keyboard.KeyCode.from_char("a"),
@@ -37,6 +42,7 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result.value.start, event)
 
     def test_char_matches_upper_and_lower(self):
+        """Lowercase matcher accepts either case when case-insensitive."""
         key = Char("a", case=False)
         event_upper = KeyEvent(
             key=pynput.keyboard.KeyCode.from_char("A"),
@@ -48,6 +54,7 @@ class MatcherTests(unittest.TestCase):
         self.assertTrue(result)
 
     def test_timed_press_release_with_wait(self):
+        """Two events within window satisfy timed matcher."""
         matcher = Char("a", case=True) @ Wait(seconds=1)
 
         press = self._event("a", KeyEventKind.PRESSED, ts=10.0)
@@ -60,6 +67,7 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result.value.end, release)
 
     def test_key_events_compare_on_code(self):
+        """Key events compare by code regardless of timestamp."""
         first = self._event("a", KeyEventKind.PRESSED, ts=1.0)
         second = self._event("a", KeyEventKind.PRESSED, ts=2.0)
 

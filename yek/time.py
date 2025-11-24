@@ -1,5 +1,11 @@
+"""Time utilities for matcher sequencing."""
+
+# pylint: disable=missing-function-docstring
+
 
 class Wait:
+    """Wrapper for wait durations used by matchers."""
+
     def __init__(self, milli: int = 0, seconds: int = 0):
         if milli < 0 or seconds < 0:
             raise ValueError("Time cannot be negative")

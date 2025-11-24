@@ -12,3 +12,7 @@ test: install
 
 clean:
 	rm -rf $(VENV)
+
+.PHONY: lint
+lint: install
+	$(UV) run --python $(VENV)/bin/python pylint $(shell git ls-files '*.py')

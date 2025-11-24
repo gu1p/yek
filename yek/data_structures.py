@@ -1,11 +1,17 @@
+"""Thread-safe containers used by the shortcut engine."""
+
+# pylint: disable=missing-function-docstring
+
 import threading
 import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict, deque
-from typing import Deque, Generic, TypeVar, List
+from typing import Deque, Generic, List, TypeVar
 
 
 class LimitedMap(ABC):
+    """Map with eviction policy implemented by subclasses."""
+
     def __init__(self):
         self.data = OrderedDict()
         self.lock = threading.Lock()
@@ -65,6 +71,8 @@ class LimitedMap(ABC):
 
 
 class CountLimitedMap(LimitedMap):
+    """Evicts items after a maximum count is reached."""
+
     def __init__(self, limit):
         super().__init__()
         self.limit = limit
@@ -75,6 +83,8 @@ class CountLimitedMap(LimitedMap):
 
 
 class TimeLimitedMap(LimitedMap):
+    """Evicts items older than the configured age (in seconds)."""
+
     def __init__(self, limit):
         super().__init__()
         self.limit = limit
@@ -91,7 +101,11 @@ class TimeLimitedMap(LimitedMap):
 
 
 T = TypeVar("T")
+
+
 class ThreadSafeBuffer(Generic[T]):
+    """Fixed-size buffer that can be read safely from multiple threads."""
+
     def __init__(self, max_len: int):
         self._buffer: Deque[T] = deque(maxlen=max_len)
         self.lock = threading.Lock()

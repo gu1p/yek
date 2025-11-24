@@ -1,17 +1,25 @@
+"""Keyboard event structures."""
+
+# pylint: disable=missing-function-docstring,import-error
+
 import time
 import uuid
-from typing import Sequence, Optional, Union
 from enum import Enum
+from typing import Optional, Sequence, Union
 
 import pynput
 
 
 class KeyEventKind(Enum):
+    """Kinds of key events we track."""
+
     PRESSED = "PRESSED"
     RELEASED = "RELEASED"
 
 
 class KeyEvent:
+    """Key event with timestamp and unique identifier."""
+
     def __init__(self, key: Union[pynput.keyboard.KeyCode, str], kind: KeyEventKind):
         self.id = uuid.uuid4()
         self.key = key
@@ -32,7 +40,7 @@ class KeyEvent:
         return self.key if isinstance(self.key, str) else repr(self.key)
 
     def get_key_next_event(self, events: Sequence["KeyEvent"]) -> Optional["KeyEvent"]:
-        for n, event in enumerate(events):
+        for event in events:
             if event.pressed_at > self.pressed_at and event.key == self.key:
                 return event
         return None
