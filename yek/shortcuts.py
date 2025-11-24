@@ -60,7 +60,7 @@ class ActionBankTrigger:
             for trigger in self._pairs.values():
                 if trigger.match(events):
                     actions.append(trigger.action)
-                return actions
+            return actions
 
     def register(self, trigger: ActionTrigger) -> None:
         with self._lock:
