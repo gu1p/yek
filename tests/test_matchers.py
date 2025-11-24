@@ -74,6 +74,29 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(hash(first), hash(second))
 
+    def test_long_sequence_matches_in_order(self):
+        """Sequence operator (/) walks through events cumulatively."""
+        matcher = (
+            Char("a", case=True)
+            / Char("b", case=True)
+            / Char("c", case=True)
+            / Char("d", case=True)
+        )
+
+        events = [
+            self._event("a", KeyEventKind.PRESSED, ts=1.0),
+            self._event("x", KeyEventKind.PRESSED, ts=1.1),
+            self._event("b", KeyEventKind.PRESSED, ts=1.2),
+            self._event("c", KeyEventKind.PRESSED, ts=1.3),
+            self._event("d", KeyEventKind.PRESSED, ts=1.4),
+        ]
+
+        result = matcher.match(events)
+
+        self.assertTrue(result)
+        self.assertEqual(result.value.start, events[0])
+        self.assertEqual(result.value.end, events[-1])
+
 
 if __name__ == "__main__":
     unittest.main()

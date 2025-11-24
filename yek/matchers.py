@@ -235,11 +235,12 @@ class _MatchSequence(Matcher):
                 return Result(stop_position=len(events))
 
             matches.append(result.value)
-            position = result.stop_position + 1
+            position += result.stop_position + 1
 
+        stop_position = max(position - 1, 0)
         return Result(
             value=Match(start=matches[0].start, end=matches[-1].end),
-            stop_position=position,
+            stop_position=stop_position,
         )
 
     def __matmul__(self, other) -> "Matcher":
