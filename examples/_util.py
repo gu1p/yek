@@ -8,6 +8,13 @@ def open_as_browser_app(
 ) -> subprocess.Popen:
     print(f"Opening {url} in browser")
     browser = browser or get_browser()
+    if browser is None:
+        # Fallback to system default browser
+        import webbrowser
+
+        webbrowser.open(url)
+        return None
+
     chrome_cmd = [
         browser,
         "--app=" + url,
@@ -27,5 +34,4 @@ def get_browser() -> str:
         browser = shutil.which(browser)
         if browser is not None:
             return browser
-
-    raise ValueError("browser not found")
+    return None

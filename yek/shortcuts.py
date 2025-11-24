@@ -190,7 +190,8 @@ class App:
             self._observer.join()
 
     def _since(self):
-        return max(self._last_called, time.time() - self._buffer_timeout)
+        window = min(self._buffer_timeout, self._sequence_timeout)
+        return max(self._last_called, time.time() - window)
 
     def _check_shortcuts(self):
         keys = self._keyboard.get_since(self._since())
@@ -200,6 +201,8 @@ class App:
         actions = self.action_triggers.match(keys)
         for action in actions:
             action.execute(Context(self._keyboard))
+        if actions:
+            self._last_called = time.time()
 
     def _setup_hot_reload(self):
         # Get the calling module (where the routes are defined)

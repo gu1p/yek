@@ -13,3 +13,10 @@ class Wait:
     @property
     def milliseconds(self):
         return self._milliseconds + self._seconds * 1000
+
+    @property
+    def seconds(self):
+        return self._seconds + self._milliseconds / 1000
+
+    def __float__(self) -> float:
+        return self.seconds

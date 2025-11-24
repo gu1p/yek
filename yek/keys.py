@@ -73,7 +73,7 @@ def Char(char: str, case: bool = False) -> Matcher:
         return Key(name=char, code=repr(pynput.keyboard.KeyCode.from_char(char)))
 
     lower_case = Key(name=char, code=repr(pynput.keyboard.KeyCode.from_char(char.lower())))
-    upper_case = Key(name=char, code=repr(pynput.keyboard.KeyCode.from_char(char.lower())))
+    upper_case = Key(name=char, code=repr(pynput.keyboard.KeyCode.from_char(char.upper())))
 
     if lower_case != upper_case:
         return _Or(lower_case, upper_case)

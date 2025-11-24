@@ -86,7 +86,7 @@ class Key(Matcher):
 
     def match(self, events: Sequence[KeyEvent]) -> Result:
         for n, event in enumerate(events):
-            if event.key == self._code and event.kind == self._event_kind:
+            if event.code == self._code and event.kind == self._event_kind:
                 return Result(value=Match(start=event, end=event), stop_position=n)
         return Result(stop_position=len(events))
 
@@ -95,12 +95,25 @@ class Key(Matcher):
         return self._code
 
     def __matmul__(self, other: Union[float, Wait]) -> Matcher:
-        if isinstance(other, tuple):
-            assert len(other) == 2 and 0 < other[0] < other[1]
-            return _TimedPressRelease(self, start=other[0], end=other[1])
+        def _to_seconds(value: Union[float, int, Wait]) -> float:
+            if isinstance(value, Wait):
+                return value.seconds
+            if isinstance(value, (int, float)):
+                return float(value)
+            raise ValueError(f"Unsupported wait value type {type(value)}")
 
-        assert other > 0
-        return _TimedPressRelease(self, start=0, end=other)
+        if isinstance(other, tuple):
+            if len(other) != 2:
+                raise ValueError("Timed press-release tuple must have exactly 2 values")
+            start, end = (_to_seconds(other[0]), _to_seconds(other[1]))
+            if not (0 <= start < end):
+                raise ValueError("Timed press-release must satisfy 0 <= start < end")
+            return _TimedPressRelease(self, start=start, end=end)
+
+        duration = _to_seconds(other)
+        if duration <= 0:
+            raise ValueError("Timed press-release duration must be positive")
+        return _TimedPressRelease(self, start=0, end=duration)
 
     def __truediv__(self, other: Union[Matcher, Tuple[int, int]]) -> Matcher:
         return _MatchSequence(self, other)
@@ -178,9 +191,9 @@ class _TimedPressRelease(Matcher):
 
     def match(self, events: Sequence[KeyEvent]) -> Result:
         for i, event in enumerate(events):
-            if event.key == self._key and event.kind == KeyEventKind.PRESSED:
+            if event.code == self._key.code and event.kind == KeyEventKind.PRESSED:
                 for j, event2 in enumerate(events[i + 1:]):
-                    if event2.key == self._key and event2.kind == KeyEventKind.RELEASED:
+                    if event2.code == self._key.code and event2.kind == KeyEventKind.RELEASED:
                         if self._start <= event2.pressed_at - event.pressed_at <= self._end:
                             return Result(value=Match(start=event, end=event2), stop_position=i + j)
         return Result(stop_position=len(events))
@@ -333,7 +346,7 @@ class _AndKeys(Matcher):
         return Result(stop_position=min_stop)
 
     def __matmul__(self, other: Union[float, Wait]) -> Matcher:
-        return _and(*[m.__matmul__(other) for m in self._keys])
+        return _and(self.a.__matmul__(other), self.b.__matmul__(other))
 
     def __truediv__(self, other: Union[Matcher, Tuple[int, int]]) -> Matcher:
         return _MatchSequence(self, other)

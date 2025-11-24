@@ -1,3 +1,15 @@
+[project]
+name = "yek"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Gustavo", email = "github.dxabr@aleeas.com" }]
+dependencies = [
+    "pynput>=1.7.7,<2.0.0",
+    "watchdog>=5.0.3,<6.0.0",
+]
+
 [tool.poetry]
 name = "yek"
 version = "0.1.0"
