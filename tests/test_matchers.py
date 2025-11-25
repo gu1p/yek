@@ -179,6 +179,53 @@ class MatcherTests(unittest.TestCase):
 
         Matcher.app = prev_app
 
+    def test_sequence_then_hold_arms_once(self):
+        """Prefix match followed by hold tail repeats without prefix event again."""
+        prev_app = Matcher.app
+
+        class _KB:  # pylint: disable=too-few-public-methods
+            """Minimal keyboard mock."""
+
+            def __init__(self):
+                self._pressed = set()
+
+            def is_pressed(self, key):
+                """Return True if key code is pressed."""
+                return key.code in self._pressed
+
+            def is_only_pressed(self, *keys):
+                """Return True if only provided keys are pressed."""
+                return {k.code for k in keys} == set(self._pressed)
+
+        keyboard = _KB()
+
+        class _App:  # pylint: disable=too-few-public-methods
+            _keyboard = keyboard
+
+        Matcher.app = _App()
+
+        matcher = (Char("a", case=True) / Hold(Left, only=True))
+
+        # First match: 'a' event plus Left held (and only Left held)
+        keyboard._pressed.update({Left.code})  # pylint: disable=protected-access
+        tap_a = self._event("a", KeyEventKind.PRESSED, ts=1.0)
+        tap_a.key = pynput.keyboard.KeyCode.from_char("a")
+        tap_left = self._event("x", KeyEventKind.PRESSED, ts=1.0)
+        tap_left.key = pynput.keyboard.Key.left.value  # type: ignore[attr-defined]
+
+        self.assertTrue(matcher.match([tap_a, tap_left]))
+
+        # Subsequent Left tap without another 'a' should still match while Left is held
+        tap_left2 = self._event("y", KeyEventKind.PRESSED, ts=1.5)
+        tap_left2.key = pynput.keyboard.Key.left.value  # type: ignore[attr-defined]
+        self.assertTrue(matcher.match([tap_left2]))
+
+        # Clear held keys; matcher should fail until re-armed
+        keyboard._pressed.clear()  # pylint: disable=protected-access
+        self.assertFalse(matcher.match([tap_left2]))
+
+        Matcher.app = prev_app
+
     def test_throttle_limits_frequency(self):
         """Throttle wrapper limits how often a held combo matches."""
         prev_app = Matcher.app

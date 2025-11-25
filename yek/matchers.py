@@ -67,6 +67,10 @@ class Matcher(abc.ABC):
     def debug(self) -> str:
         """Debug description of the matcher."""
 
+    def throttle(self, every_ms: int = 100) -> "Throttle":
+        """Wrap this matcher in a Throttle."""
+        return Throttle(self, every_ms=every_ms)
+
 
 class Key(Matcher):
     def __init__(
@@ -228,8 +232,18 @@ class _MatchSequence(Matcher):
                 self._matchers.extend(matcher._matchers)
             else:
                 self._matchers.append(matcher)
+        self._hold_tail = _is_hold_like(self._matchers[-1]) if self._matchers else False
+        self._armed = False
 
     def match(self, events: Sequence[KeyEvent]) -> Result:
+        if self._hold_tail and self._armed:
+            tail = self._matchers[-1]
+            tail_result = tail.match(events)
+            if tail_result:
+                return tail_result
+            self._armed = False
+            return Result(stop_position=len(events))
+
         position = 0
         matches = []
         for matcher in self._matchers:
@@ -241,6 +255,8 @@ class _MatchSequence(Matcher):
             position += result.stop_position + 1
 
         stop_position = max(position - 1, 0)
+        if self._hold_tail:
+            self._armed = True
         return Result(
             value=Match(start=matches[0].start, end=matches[-1].end),
             stop_position=stop_position,
@@ -503,6 +519,14 @@ def _and(*a: Matcher) -> Matcher:
     return _And(a, b)
 
 
+def _is_hold_like(matcher: Matcher) -> bool:
+    if isinstance(matcher, Hold):
+        return True
+    if isinstance(matcher, Throttle):
+        return _is_hold_like(matcher.inner_matcher)
+    return False
+
+
 class Hold(Matcher):
     """
     Matches when the given keys are currently held down (live keyboard state),
@@ -566,6 +590,7 @@ class Throttle(Matcher):
         self._matcher = matcher
         self._every_ms = every_ms
         self._last_fire = 0.0
+        self.inner_matcher = matcher  # public alias for composed checks
 
     def match(self, events: Sequence[KeyEvent]) -> Result:
         result = self._matcher.match(events)
