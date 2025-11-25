@@ -9,10 +9,11 @@ except ImportError:
 
 if pynput is not None:
     from yek.events import KeyEvent, KeyEventKind
-    from yek.keys import Char
+    from yek.keys import Char, Ctrl, Shift, Left
+    from yek.matchers import Hold, Matcher, Throttle
     from yek.time import Wait
 else:
-    KeyEvent = KeyEventKind = Char = Wait = None  # type: ignore  # pylint: disable=invalid-name
+    KeyEvent = KeyEventKind = Char = Ctrl = Shift = Left = Hold = Matcher = Throttle = Wait = None  # type: ignore  # pylint: disable=invalid-name
 
 
 @unittest.skipIf(pynput is None, "pynput not installed")
@@ -96,6 +97,223 @@ class MatcherTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(result.value.start, events[0])
         self.assertEqual(result.value.end, events[-1])
+
+    def test_hold_matches_on_state_and_repeats(self):
+        """Hold modifier keeps matching across repeated taps."""
+        prev_app = Matcher.app
+
+        class _KB:  # pylint: disable=too-few-public-methods
+            """Minimal keyboard mock."""
+
+            def __init__(self):
+                self._pressed = set()
+
+            def is_pressed(self, key):
+                """Return True if key code is marked as pressed."""
+                return key.code in self._pressed
+
+        keyboard = _KB()
+        keyboard._pressed.update({Ctrl.code, Shift.code})  # pylint: disable=protected-access
+
+        class _App:  # pylint: disable=too-few-public-methods
+            """Minimal app stub carrying keyboard state."""
+            _keyboard = keyboard
+
+        Matcher.app = _App()
+
+        matcher = Hold(Ctrl, Shift) / Left
+
+        tap1 = self._event("x", KeyEventKind.PRESSED, ts=1.0)
+        tap1.key = pynput.keyboard.Key.left.value  # type: ignore[attr-defined]
+        tap1.pressed_at = 1.0
+
+        tap2 = self._event("y", KeyEventKind.PRESSED, ts=2.0)
+        tap2.key = pynput.keyboard.Key.left.value  # type: ignore[attr-defined]
+        tap2.pressed_at = 2.0
+
+        self.assertTrue(matcher.match([tap1]))
+        self.assertTrue(matcher.match([tap2]))
+
+        keyboard._pressed.clear()  # pylint: disable=protected-access
+        self.assertFalse(matcher.match([tap2]))
+
+        Matcher.app = prev_app
+
+    def test_hold_only_requires_no_extra_keys(self):
+        """Hold(..., only=True) fails if extra keys are down."""
+        prev_app = Matcher.app
+
+        class _KB:  # pylint: disable=too-few-public-methods
+            """Minimal keyboard mock."""
+
+            def __init__(self):
+                self._pressed = set()
+
+            def is_pressed(self, key):
+                """Return True if key code is pressed."""
+                return key.code in self._pressed
+
+            def is_only_pressed(self, *keys):
+                """Return True if only provided keys are pressed."""
+                return {k.code for k in keys} == set(self._pressed)
+
+        keyboard = _KB()
+        keyboard._pressed.update({Ctrl.code, Shift.code})  # pylint: disable=protected-access
+
+        class _App:  # pylint: disable=too-few-public-methods
+            """Minimal app stub carrying keyboard state."""
+            _keyboard = keyboard
+
+        Matcher.app = _App()
+
+        matcher = Hold(Ctrl, Shift, only=True) / Left
+
+        tap = self._event("x", KeyEventKind.PRESSED, ts=1.0)
+        tap.key = pynput.keyboard.Key.left.value  # type: ignore[attr-defined]
+        tap.pressed_at = 1.0
+
+        self.assertTrue(matcher.match([tap]))
+
+        keyboard._pressed.add(Char("z", case=True).code)  # pylint: disable=protected-access
+        self.assertFalse(matcher.match([tap]))
+
+        Matcher.app = prev_app
+
+    def test_throttle_limits_frequency(self):
+        """Throttle wrapper limits how often a held combo matches."""
+        prev_app = Matcher.app
+
+        class _KB:  # pylint: disable=too-few-public-methods
+            """Minimal keyboard mock for throttling tests."""
+
+            def __init__(self):
+                self._pressed = set()
+
+            def is_pressed(self, key):
+                """Return True if key code is pressed."""
+                return key.code in self._pressed
+
+            def is_only_pressed(self, *keys):
+                """Return True if only provided keys are pressed."""
+                return {k.code for k in keys} == set(self._pressed)
+
+        keyboard = _KB()
+        keyboard._pressed.update({Ctrl.code, Shift.code})  # pylint: disable=protected-access
+
+        class _App:  # pylint: disable=too-few-public-methods
+            _keyboard = keyboard
+
+        Matcher.app = _App()
+
+        throttled = Throttle(Hold(Ctrl, Shift), every_ms=100)
+
+        # Patch time to control elapsed intervals
+        class FakeTime:  # pylint: disable=too-few-public-methods
+            """Deterministic time stub."""
+
+            def __init__(self, values):
+                self.values = list(values)
+
+            def time(self):
+                """Pop the next timestamp."""
+                return self.values.pop(0)
+
+        base_time = 1.0
+        fake = FakeTime(
+            [
+                base_time,          # Hold call 1
+                base_time,          # Throttle call 1
+                base_time + 0.05,   # Hold call 2
+                base_time + 0.05,   # Throttle call 2 (blocked)
+                base_time + 0.11,   # Hold call 3
+                base_time + 0.11,   # Throttle call 3 (allowed)
+            ]
+        )
+        original_throttle_time = Throttle.__dict__["match"].__globals__["time"]
+        original_hold_time = Hold.__dict__["match"].__globals__["time"]
+
+        try:
+            Throttle.__dict__["match"].__globals__["time"] = fake
+            Hold.__dict__["match"].__globals__["time"] = fake
+            tap = self._event("x", KeyEventKind.PRESSED, ts=0)
+            tap.key = pynput.keyboard.Key.left.value  # type: ignore[attr-defined]
+            tap.pressed_at = 0
+
+            self.assertTrue(throttled.match([tap]))
+            self.assertFalse(throttled.match([tap]))
+            self.assertTrue(throttled.match([tap]))
+        finally:
+            Throttle.__dict__["match"].__globals__["time"] = original_throttle_time
+            Hold.__dict__["match"].__globals__["time"] = original_hold_time
+            Matcher.app = prev_app
+
+    def test_hold_throttle_helper(self):
+        """Hold.throttle helper returns a throttled matcher that respects interval."""
+        prev_app = Matcher.app
+
+        class _KB:  # pylint: disable=too-few-public-methods
+            """Minimal keyboard mock for helper tests."""
+
+            def __init__(self):
+                self._pressed = set()
+
+            def is_pressed(self, key):
+                """Return True if key code is pressed."""
+                return key.code in self._pressed
+
+            def is_only_pressed(self, *keys):
+                """Return True if only provided keys are pressed."""
+                return {k.code for k in keys} == set(self._pressed)
+
+        keyboard = _KB()
+        keyboard._pressed.update({Ctrl.code, Shift.code})  # pylint: disable=protected-access
+
+        class _App:  # pylint: disable=too-few-public-methods
+            _keyboard = keyboard
+
+        Matcher.app = _App()
+
+        throttled = Hold(Ctrl, Shift).throttle(every_ms=50)
+
+        class FakeTime:  # pylint: disable=too-few-public-methods
+            """Deterministic time stub."""
+
+            def __init__(self, values):
+                self.values = list(values)
+
+            def time(self):
+                """Pop the next timestamp."""
+                return self.values.pop(0)
+
+        fake = FakeTime(
+            [
+                1.0,  # Hold call 1
+                1.0,  # Throttle call 1
+                1.02,  # Hold call 2 (too soon)
+                1.02,  # Throttle call 2 blocked
+                1.06,  # Hold call 3 (enough time passed)
+                1.06,  # Throttle call 3 allowed
+            ]
+        )
+
+        original_throttle_time = Throttle.__dict__["match"].__globals__["time"]
+        original_hold_time = Hold.__dict__["match"].__globals__["time"]
+
+        try:
+            Throttle.__dict__["match"].__globals__["time"] = fake
+            Hold.__dict__["match"].__globals__["time"] = fake
+
+            tap = self._event("x", KeyEventKind.PRESSED, ts=0)
+            tap.key = pynput.keyboard.Key.left.value  # type: ignore[attr-defined]
+            tap.pressed_at = 0
+
+            self.assertTrue(throttled.match([tap]))
+            self.assertFalse(throttled.match([tap]))
+            self.assertTrue(throttled.match([tap]))
+        finally:
+            Throttle.__dict__["match"].__globals__["time"] = original_throttle_time
+            Hold.__dict__["match"].__globals__["time"] = original_hold_time
+            Matcher.app = prev_app
 
 
 if __name__ == "__main__":

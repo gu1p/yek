@@ -4,6 +4,7 @@
 
 import abc
 import math
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union
 
@@ -19,6 +20,8 @@ __all__ = [
     "Matcher",
     "_TimedPressRelease",
     "_MatchSequence",
+    "Hold",
+    "Throttle",
 ]
 
 
@@ -498,3 +501,95 @@ def _and(*a: Matcher) -> Matcher:
         return _Or(*[_and(m, b) for m in a._matchers])
 
     return _And(a, b)
+
+
+class Hold(Matcher):
+    """
+    Matches when the given keys are currently held down (live keyboard state),
+    without consuming any events from the sequence.
+    """
+
+    def __init__(self, *keys: Key, only: bool = False):
+        if len(keys) == 0:
+            raise ValueError("Hold requires at least one key")
+        for key in keys:
+            if not isinstance(key, Key):
+                raise ValueError(f"Hold expects Key instances, got {type(key)}")
+        self._keys = keys
+        self._only = only
+
+    def match(self, events: Sequence[KeyEvent]) -> Result:
+        keyboard_state = getattr(self.app, "_keyboard", None) if self.app else None
+        if keyboard_state is None:
+            return Result(stop_position=len(events))
+
+        if self._only:
+            if not keyboard_state.is_only_pressed(*self._keys):
+                return Result(stop_position=len(events))
+        elif not all(keyboard_state.is_pressed(k) for k in self._keys):
+            return Result(stop_position=len(events))
+
+        synthetic = KeyEvent(key="__hold__", kind=KeyEventKind.PRESSED)
+        synthetic.pressed_at = time.time()
+        return Result(value=Match(start=synthetic, end=synthetic), stop_position=-1)
+
+    def __truediv__(self, other: Union[Matcher, Tuple[int, int]]) -> "Matcher":
+        return _MatchSequence(self, other)
+
+    def __or__(self, other: Matcher) -> Matcher:
+        return _Or(self, other)
+
+    def __and__(self, other: Matcher) -> Matcher:
+        return _and(self, other)
+
+    def __matmul__(self, other: Union[float, Wait]) -> Matcher:
+        raise ValueError("Cannot chain timed press-release with Hold")
+
+    def debug(self) -> str:
+        suffix = ", only=True" if self._only else ""
+        return f"Hold({', '.join([k.debug() for k in self._keys])}{suffix})"
+
+    def throttle(self, every_ms: int = 100) -> "Throttle":
+        """Convenience to wrap this hold in a Throttle."""
+        return Throttle(self, every_ms=every_ms)
+
+
+class Throttle(Matcher):
+    """
+    Wraps another matcher and limits how often it can return a match.
+    Useful for held combos that should only fire every N milliseconds.
+    """
+
+    def __init__(self, matcher: Matcher, every_ms: int = 100):
+        if every_ms <= 0:
+            raise ValueError("every_ms must be positive")
+        self._matcher = matcher
+        self._every_ms = every_ms
+        self._last_fire = 0.0
+
+    def match(self, events: Sequence[KeyEvent]) -> Result:
+        result = self._matcher.match(events)
+        if not result:
+            return result
+
+        now = time.time()
+        if now - self._last_fire >= self._every_ms / 1000:
+            self._last_fire = now
+            return result
+
+        return Result(stop_position=result.stop_position)
+
+    def __truediv__(self, other: Union[Matcher, Tuple[int, int]]) -> "Matcher":
+        return _MatchSequence(self, other)
+
+    def __or__(self, other: Matcher) -> Matcher:
+        return _Or(self, other)
+
+    def __and__(self, other: Matcher) -> Matcher:
+        return _and(self, other)
+
+    def __matmul__(self, other: Union[float, Wait]) -> Matcher:
+        raise ValueError("Cannot chain timed press-release with Throttle")
+
+    def debug(self) -> str:
+        return f"Throttle({self._matcher.debug()}, every_ms={self._every_ms})"
