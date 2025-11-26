@@ -7,11 +7,12 @@ from contextlib import suppress
 import pynput
 import pynput.keyboard
 
-from yek.matchers import Key, Matcher, _Or, StringMatcher
+from yek.matchers import Key, Matcher, _AndKeys, _Or, StringMatcher
 
 __all__ = [
     "Char",
     "String",
+    "Chord",
     "Alt",
     "AltL",
     "AltR",
@@ -88,6 +89,11 @@ def Char(char: str, case: bool = False) -> Matcher:
 def String(s: str, case: bool = False) -> Matcher:
     """Create a matcher for an exact string sequence."""
     return StringMatcher(s, case=case)
+
+
+def Chord(*keys: Key, only: bool = True) -> Matcher:
+    """Create a chord matcher. If only=True (default), fails when extra keys are pressed."""
+    return _AndKeys(*keys, only=only)
 
 
 Alt = Key(name="Alt", code=repr(pynput.keyboard.Key.alt.value))

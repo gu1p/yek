@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """Utility helpers for keyboard state and function metadata."""
 
 import inspect

@@ -7,9 +7,10 @@ from tests.pynput_utils import require_pynput
 pynput = require_pynput()
 
 # pylint: disable=wrong-import-position
+# pylint: disable=duplicate-code
 from yek.events import KeyEvent, KeyEventKind
 from yek.keys import Char, Ctrl, Shift, Left
-from yek.matchers import Hold, Matcher, Throttle
+from yek.matchers import Hold, Loop, Matcher, Throttle
 from yek.time import Wait
 
 
@@ -82,7 +83,6 @@ class MatcherTests(unittest.TestCase):
 
         events = [
             self._event("a", KeyEventKind.PRESSED, ts=1.0),
-            self._event("x", KeyEventKind.PRESSED, ts=1.1),
             self._event("b", KeyEventKind.PRESSED, ts=1.2),
             self._event("c", KeyEventKind.PRESSED, ts=1.3),
             self._event("d", KeyEventKind.PRESSED, ts=1.4),
@@ -93,6 +93,31 @@ class MatcherTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(result.value.start, events[0])
         self.assertEqual(result.value.end, events[-1])
+
+    def test_sequence_allows_releases_of_previous_keys(self):
+        """Releases of already-matched keys between steps should be ignored."""
+        matcher = Char("a", case=True) / Char("b", case=True)
+        events = [
+            self._event("a", KeyEventKind.PRESSED, ts=1.0),
+            self._event("a", KeyEventKind.RELEASED, ts=1.05),
+            self._event("b", KeyEventKind.PRESSED, ts=1.1),
+        ]
+
+        result = matcher.match(events)
+
+        self.assertTrue(result)
+        self.assertEqual(result.value.start, events[0])
+        self.assertEqual(result.value.end, events[-1])
+
+    def test_sequence_rejects_skipped_events(self):
+        """Sequences require adjacent events; extra keys in between fail."""
+        matcher = Char("a", case=True) / Char("b", case=True)
+        events = [
+            self._event("a", KeyEventKind.PRESSED, ts=1.0),
+            self._event("x", KeyEventKind.PRESSED, ts=1.1),
+            self._event("b", KeyEventKind.PRESSED, ts=1.2),
+        ]
+        self.assertFalse(matcher.match(events))
 
     def test_hold_matches_on_state_and_repeats(self):
         """Hold modifier keeps matching across repeated taps."""
@@ -357,6 +382,61 @@ class MatcherTests(unittest.TestCase):
             Throttle.__dict__["match"].__globals__["time"] = original_throttle_time
             Hold.__dict__["match"].__globals__["time"] = original_hold_time
             Matcher.app = prev_app
+
+    def test_loop_sequence_renews_and_expires(self):
+        """Loop arms after prefix, renews deadline, and expires when idle."""
+        matcher = Char("a", case=True) / Loop(Char("b", case=True), tolerance_ms=1000, renew=True)
+
+        tap_a = self._event("a", KeyEventKind.PRESSED, ts=1.0)
+        tap_b1 = self._event("b", KeyEventKind.PRESSED, ts=1.1)
+        self.assertTrue(matcher.match([tap_a, tap_b1]))
+
+        tap_b2 = self._event("b", KeyEventKind.PRESSED, ts=2.0)  # within renewed window
+        self.assertTrue(matcher.match([tap_b2]))
+
+        tap_b3 = self._event("b", KeyEventKind.PRESSED, ts=4.2)  # after expiry
+        self.assertFalse(matcher.match([tap_b3]))
+
+        tap_a2 = self._event("a", KeyEventKind.PRESSED, ts=4.3)
+        tap_b4 = self._event("b", KeyEventKind.PRESSED, ts=4.35)
+        self.assertTrue(matcher.match([tap_a2, tap_b4]))
+
+    def test_loop_without_renew_expires_at_deadline(self):
+        """Loop without renew stops matching after fixed deadline."""
+        matcher = Char("a", case=True) / Loop(Char("b", case=True), tolerance_ms=500, renew=False)
+
+        tap_a = self._event("a", KeyEventKind.PRESSED, ts=1.0)
+        tap_b1 = self._event("b", KeyEventKind.PRESSED, ts=1.05)
+        self.assertTrue(matcher.match([tap_a, tap_b1]))
+
+        tap_b2 = self._event("b", KeyEventKind.PRESSED, ts=1.7)  # after deadline
+        self.assertFalse(matcher.match([tap_b2]))
+
+        tap_a2 = self._event("a", KeyEventKind.PRESSED, ts=1.8)
+        tap_b3 = self._event("b", KeyEventKind.PRESSED, ts=1.85)
+        self.assertTrue(matcher.match([tap_a2, tap_b3]))
+
+    def test_loop_must_be_last_in_sequence(self):
+        """Loop in the middle of a sequence should raise."""
+        with self.assertRaises(ValueError):
+            _ = Char("a", case=True) / Loop(Char("b", case=True)) / Char("c", case=True)
+
+    def test_exclusive_chord_rejects_extra_keys(self):
+        """Exclusive chord should fail when another key is pressed in the overlap window."""
+        chord = Char("a", case=True) & Char("b", case=True)
+        a_press = self._event("a", KeyEventKind.PRESSED, ts=1.0)
+        b_press = self._event("b", KeyEventKind.PRESSED, ts=1.01)
+        c_press = self._event("c", KeyEventKind.PRESSED, ts=1.02)
+        self.assertFalse(chord.match([a_press, b_press, c_press]))
+
+    def test_nonexclusive_chord_allows_extra_keys(self):
+        """Non-exclusive chord should match even if extra keys are pressed."""
+        chord = (Char("a", case=True) + Char("b", case=True))
+        a_press = self._event("a", KeyEventKind.PRESSED, ts=1.0)
+        b_press = self._event("b", KeyEventKind.PRESSED, ts=1.01)
+        c_press = self._event("c", KeyEventKind.PRESSED, ts=1.02)
+        result = chord.match([a_press, b_press, c_press])
+        self.assertTrue(result)
 
 
 if __name__ == "__main__":

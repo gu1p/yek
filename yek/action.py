@@ -82,10 +82,11 @@ class SimpleAction(Action):
 
 
 class Context:
-    def __init__(self, keyboard_state: KeyboardStateMap):
+    def __init__(self, keyboard_state: KeyboardStateMap, match_result=None):
         self.__keyboard_state = keyboard_state
         self.__started_at = time.time()
         self.__payload = {}
+        self.__match_result = match_result
 
     def is_pressed(self, key: Key):
         return self.__keyboard_state.is_pressed(key)
@@ -108,6 +109,16 @@ class Context:
     @property
     def payload(self) -> Dict[str, Any]:
         return self.__payload
+
+    @property
+    def match(self):
+        return self.__match_result
+
+    @property
+    def match_end(self):
+        if self.__match_result and self.__match_result.value:
+            return self.__match_result.value.end
+        return None
 
 
 def get_function_name(obj: Callable[..., Any]) -> Optional[str]:
