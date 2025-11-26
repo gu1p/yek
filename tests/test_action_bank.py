@@ -3,29 +3,18 @@
 import unittest
 from time import time
 
-# pylint: disable=duplicate-code,invalid-name
-try:
-    import pynput  # type: ignore
-except ImportError:
-    pynput = None
+from tests.pynput_utils import require_pynput
 
-if pynput is not None:
-    from yek.action import SimpleAction
-    from yek.events import KeyEventKind
-    from yek.key_utils import get_event
-    from yek.keys import Cmd, Shift, Char
-    from yek.shortcuts import ActionBankTrigger, ActionTrigger
-else:
-    SimpleAction = (
-        KeyEventKind
-    ) = (
-        get_event
-    ) = (
-        Cmd
-    ) = Shift = Char = ActionBankTrigger = ActionTrigger = None  # type: ignore  # pylint: disable=invalid-name
+pynput = require_pynput()
+
+# pylint: disable=wrong-import-position
+from yek.action import SimpleAction
+from yek.events import KeyEventKind
+from yek.key_utils import get_event
+from yek.keys import Cmd, Shift, Char
+from yek.shortcuts import ActionBankTrigger, ActionTrigger
 
 
-@unittest.skipIf(pynput is None, "pynput not installed")
 class ActionBankTests(unittest.TestCase):
     """Action bank should evaluate each registered trigger."""
 

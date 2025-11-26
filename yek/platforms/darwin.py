@@ -2,9 +2,15 @@
 
 import os
 import subprocess
+import sys
 from contextlib import suppress
 
 from yek.platforms.common import PynputKeyboardState
+
+
+def _running_interactively() -> bool:
+    """Return True if stdout/stderr are attached to a TTY."""
+    return sys.stdout.isatty() or sys.stderr.isatty()
 
 
 class MacKeyboardState(PynputKeyboardState):
@@ -30,15 +36,24 @@ class MacKeyboardState(PynputKeyboardState):
 
         MacKeyboardState._prompted = True
         with suppress(Exception):
-            print(
-                "yek could not start keyboard listener (macOS permissions may be missing). "
-                "Opening Input Monitoring settings..."
+            message = (
+                "yek could not start keyboard listener "
+                "(macOS Input Monitoring permission may be missing). "
+                "Grant access in System Settings > Privacy & Security > Input Monitoring for this "
+                "executable."
             )
-            subprocess.Popen(  # pylint: disable=consider-using-with
-                [
-                    "open",
-                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Keyboard",
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            if _running_interactively():
+                print(
+                    f"{message} Opening Input Monitoring settings...",
+                    file=sys.stderr,
+                )
+                subprocess.Popen(  # pylint: disable=consider-using-with
+                    [
+                        "open",
+                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Keyboard",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                print(message, file=sys.stderr)

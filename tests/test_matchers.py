@@ -2,21 +2,17 @@
 
 import unittest
 
-try:
-    import pynput  # type: ignore
-except ImportError:
-    pynput = None
+from tests.pynput_utils import require_pynput
 
-if pynput is not None:
-    from yek.events import KeyEvent, KeyEventKind
-    from yek.keys import Char, Ctrl, Shift, Left
-    from yek.matchers import Hold, Matcher, Throttle
-    from yek.time import Wait
-else:
-    KeyEvent = KeyEventKind = Char = Ctrl = Shift = Left = Hold = Matcher = Throttle = Wait = None  # type: ignore  # pylint: disable=invalid-name
+pynput = require_pynput()
+
+# pylint: disable=wrong-import-position
+from yek.events import KeyEvent, KeyEventKind
+from yek.keys import Char, Ctrl, Shift, Left
+from yek.matchers import Hold, Matcher, Throttle
+from yek.time import Wait
 
 
-@unittest.skipIf(pynput is None, "pynput not installed")
 class MatcherTests(unittest.TestCase):
     """Exercises matcher combinations when pynput is available."""
 
